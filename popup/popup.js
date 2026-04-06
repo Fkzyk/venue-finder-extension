@@ -269,13 +269,16 @@ function renderResults() {
       </div>
       ${v.priceDetail ? `<div class="venue-price-detail">${esc(v.priceDetail)}</div>` : ''}
       <div class="venue-actions">
-        ${v.officialUrl ? `<button onclick="window.open('${escA(v.officialUrl)}')">サイト</button>` : ''}
-        <button onclick="window.open('${escA(maps)}')">地図</button>
+        ${v.officialUrl ? `<button class="btn-link" data-url="${escA(v.officialUrl)}">サイト</button>` : ''}
+        <button class="btn-link" data-url="${escA(maps)}">地図</button>
         <button class="btn-remove" data-id="${v.id}">削除</button>
       </div>
     </div>`;
   }).join('');
 
+  list.querySelectorAll('.btn-link').forEach(b => {
+    b.addEventListener('click', () => chrome.tabs.create({ url: b.dataset.url }));
+  });
   list.querySelectorAll('.btn-remove').forEach(b => {
     b.addEventListener('click', () => removeVenue(parseFloat(b.dataset.id)));
   });
