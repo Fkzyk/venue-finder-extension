@@ -3,20 +3,35 @@ let venues = [];
 let searchSettings = {};
 
 // 自動保存対象フォームフィールド
-const FORM_FIELDS = ['purpose', 'areas', 'budget', 'capacity', 'fullday-hours', 'extra-keywords'];
+const FORM_FIELDS = ['purpose', 'areas', 'budget', 'capacity', 'fullday-hours', 'extra-keywords', 'search-keywords'];
 
-// デフォルト検索キーワード
+// デフォルト検索キーワード（1行1キーワード、エリア名と組み合わせて「{エリア} {キーワード}」で検索）
 const DEFAULT_SEARCH_KEYWORDS = [
   '貸会議室',
-  'レンタルスペース 会議',
-  '公民館 会議室 貸出',
-  'コワーキングスペース 個室',
-  'ホテル 会議室 貸出',
-  '商工会議所 会議室',
-  '市民センター 会議室',
+  '貸会議室 個室',
+  '貸会議室 格安',
+  '貸会議室 少人数',
+  'レンタルスペース',
+  'レンタルスペース 個室',
+  '会議室 時間貸し',
+  '会議室 レンタル',
+  'コワーキングスペース',
+  'コワーキング 個室',
+  '公民館',
+  '市民センター',
+  '商工会議所',
   '図書館 会議室',
-  'TKP 貸会議室',
-  'レンタルオフィス 時間貸し'
+  'ホテル 会議室',
+  'TKP',
+  'リージャス',
+  'レンタルオフィス',
+  'シェアオフィス',
+  'インスタベース',
+  'スペースマーケット',
+  'スペイシー',
+  '多目的室',
+  '研修室',
+  '面接 貸室',
 ];
 
 function getSearchKeywords() {
@@ -50,6 +65,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
   if (stored.formData) restoreFormData(stored.formData);
   if (stored.activeTab) switchTab(stored.activeTab);
+
+  // 検索キーワードが空ならデフォルト値をセット
+  const kwEl = document.getElementById('search-keywords');
+  if (kwEl && !kwEl.value.trim()) {
+    kwEl.value = DEFAULT_SEARCH_KEYWORDS.join('\n');
+  }
 
   updateResultCount();
   renderResults();
@@ -744,10 +765,10 @@ function restoreSettings() {
   if (searchSettings.periodEnd) document.getElementById('period-end').value = searchSettings.periodEnd;
   if (searchSettings.payTransfer !== undefined) document.getElementById('pay-transfer').checked = searchSettings.payTransfer;
   if (searchSettings.payCorporate !== undefined) document.getElementById('pay-corporate').checked = searchSettings.payCorporate;
-  if (searchSettings.searchKeywords) {
-    document.getElementById('search-keywords').value = searchSettings.searchKeywords;
-  } else {
-    document.getElementById('search-keywords').value = DEFAULT_SEARCH_KEYWORDS.join('\n');
+  // search-keywordsはFORM_FIELDSで自動復元されるので、初回のみデフォルト値をセット
+  const kwEl = document.getElementById('search-keywords');
+  if (kwEl && !kwEl.value) {
+    kwEl.value = DEFAULT_SEARCH_KEYWORDS.join('\n');
   }
   if (searchSettings.otherConditions) document.getElementById('other-conditions').value = searchSettings.otherConditions;
 }
