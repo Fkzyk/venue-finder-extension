@@ -328,7 +328,17 @@ function exportExcel() {
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(ai), '次のアクション');
 
   const d = new Date();
-  XLSX.writeFile(wb, `会場調査_${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}.xlsx`);
+  const dateStr = `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}`;
+  const purpose = document.getElementById('purpose')?.value || '会場';
+  // エリアから地名を取得（最初の1件の都道府県+市区町村）
+  const areasText = document.getElementById('areas')?.value?.trim() || '';
+  const firstArea = areasText.split('\n').map(a => a.trim()).filter(a => a)[0] || '';
+  // 「東京都新宿区...」→「東京都新宿区」、「岡山県岡山市...」→「岡山県岡山市」
+  const areaMatch = firstArea.match(/((?:東京都|北海道|(?:京都|大阪)府|.{2,3}県)(?:[^区市町村]{1,5}[区市町村])?)/)
+    || firstArea.match(/(.{2,10}[区市町村駅])/);
+  const areaName = areaMatch ? areaMatch[1] : firstArea.substring(0, 10);
+  const fileName = `${dateStr}_${areaName}${purpose}`;
+  XLSX.writeFile(wb, `${fileName}.xlsx`);
 }
 
 // ===== ユーティリティ =====
