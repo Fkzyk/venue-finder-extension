@@ -14,62 +14,60 @@
 
     <!-- 検索タブ -->
     <div id="tab-search" class="tab-content active">
-      <h2>会場一括検索</h2>
-
       <div class="form-group">
-        <label>調査目的</label>
-        <select id="purpose">
-          <option value="面接会場">面接会場</option>
-          <option value="研修室">研修室</option>
-          <option value="会議室">会議室</option>
-          <option value="セミナー会場">セミナー会場</option>
-          <option value="イベント会場">イベント会場</option>
-          <option value="その他">その他</option>
-        </select>
-      </div>
-
-      <div class="form-group">
-        <label>基準地点（住所・駅名）</label>
-        <textarea id="areas" rows="3" placeholder="例：&#10;東京都新宿区西新宿1-1-1&#10;横浜市中区本町6-50-10"></textarea>
-        <small>1行に1地点。複数指定可能</small>
+        <label>基準地点（住所・駅名）1行1地点</label>
+        <textarea id="areas" rows="2" placeholder="例：東京都新宿区西新宿1-1-1"></textarea>
       </div>
 
       <div class="form-row">
         <div class="form-group half">
-          <label>予算上限（円/時）</label>
-          <input type="number" id="budget" value="2000" step="100">
+          <label>目的</label>
+          <select id="purpose">
+            <option value="面接会場">面接会場</option>
+            <option value="研修室">研修室</option>
+            <option value="会議室">会議室</option>
+            <option value="セミナー会場">セミナー</option>
+            <option value="イベント会場">イベント</option>
+            <option value="その他">その他</option>
+          </select>
         </div>
         <div class="form-group half">
-          <label>収容人数</label>
-          <input type="number" id="capacity" value="2" min="1">
+          <label>予算（円/時）</label>
+          <input type="number" id="budget" value="2000" step="100">
         </div>
       </div>
 
-      <div class="form-group">
-        <label>終日の定義（時間）</label>
-        <input type="number" id="fullday-hours" value="8" min="1" max="24">
+      <div class="form-row">
+        <div class="form-group half">
+          <label>人数</label>
+          <input type="number" id="capacity" value="2" min="1">
+        </div>
+        <div class="form-group half">
+          <label>終日（時間）</label>
+          <input type="number" id="fullday-hours" value="8" min="1" max="24">
+        </div>
       </div>
 
-      <div class="form-group">
-        <label>追加キーワード（任意）</label>
-        <input type="text" id="extra-keywords" placeholder="例：個室 WiFi">
+      <div class="form-row">
+        <div class="form-group half">
+          <label>追加キーワード</label>
+          <input type="text" id="extra-keywords" placeholder="個室 WiFi">
+        </div>
+        <div class="form-group quarter">
+          <label>間隔(秒)</label>
+          <input type="number" id="request-delay" value="3" min="1" max="30">
+        </div>
+        <div class="form-group quarter">
+          <label>最大件数</label>
+          <input type="number" id="max-fetch" value="20" min="1" max="100">
+        </div>
       </div>
 
-      <div class="form-group">
-        <label>リクエスト間隔（秒）</label>
-        <input type="number" id="request-delay" value="3" min="1" max="30">
-        <small>ボット判定回避のため間隔を空けます</small>
+      <div class="btn-row">
+        <button id="btn-search" class="btn-primary">施設を検索</button>
+        <button id="btn-fetch-prices" class="btn-primary btn-phase2">料金を取得</button>
+        <button id="btn-stop" class="btn-danger btn-stop" style="display:none;">中止</button>
       </div>
-
-      <div class="form-group">
-        <label>第2段階：最大取得件数</label>
-        <input type="number" id="max-fetch" value="20" min="1" max="100">
-        <small>料金未取得の施設をこの件数まで順に取得</small>
-      </div>
-
-      <button id="btn-search" class="btn-primary">第1段階：施設を一括検索</button>
-      <button id="btn-fetch-prices" class="btn-primary btn-phase2">第2段階：料金を一括取得</button>
-      <button id="btn-stop" class="btn-danger btn-stop" style="display:none; width:100%; margin-top:6px; padding:10px; font-size:14px; font-weight:600;">検索を中止</button>
 
       <div id="search-status" class="status-area"></div>
     </div>
@@ -88,8 +86,6 @@
 
     <!-- 設定タブ -->
     <div id="tab-settings" class="tab-content">
-      <h2>設定</h2>
-
       <div class="form-group">
         <label>利用期間</label>
         <div class="form-row">
@@ -100,9 +96,9 @@
       </div>
 
       <div class="form-group">
-        <label>検索キーワード（1行1キーワード。「{エリア名} {キーワード}」で検索）</label>
-        <textarea id="search-keywords" rows="12" placeholder="貸会議室&#10;レンタルスペース&#10;公民館"></textarea>
-        <small>自動保存。空にするとデフォルトに戻ります</small>
+        <label>検索キーワード（1行1キーワード）</label>
+        <textarea id="search-keywords" rows="10" placeholder="貸会議室&#10;レンタルスペース&#10;公民館"></textarea>
+        <small>自動保存。空でデフォルトに戻ります</small>
       </div>
 
       <div class="form-group">
