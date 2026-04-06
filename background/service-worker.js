@@ -594,8 +594,6 @@ chrome.action.onClicked.addListener(async () => {
     type: 'popup',
     width: 420,
     height: 580,
-    top: 80,
-    left: Math.round(screen.availWidth - 450),
   });
   panelWindowId = win.id;
 });
