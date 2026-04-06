@@ -111,8 +111,8 @@ function setSearchRunning(running) {
 }
 
 // =========================================================
-// 第1段階：fetchでGoogle検索HTMLを取得→施設URLを抽出
-// タブを一切開かない
+// 第1段階：バックグラウンドタブ1つを使い回してGoogle検索
+// タブは非アクティブで1つだけ。ユーザーの操作を邪魔しない
 // =========================================================
 async function startBulkSearch() {
   const btn = document.getElementById('btn-search');
@@ -140,7 +140,7 @@ async function startBulkSearch() {
     for (const keyword of keywords) {
       const query = extra ? `${area} ${keyword} ${extra}` : `${area} ${keyword}`;
       searchUrls.push({
-        url: `https://www.google.co.jp/search?q=${encodeURIComponent(query)}&num=20`,
+        url: `https://www.google.co.jp/search?q=${encodeURIComponent(query)}&num=20&hl=ja`,
         label: `${area} →「${keyword}」`,
         area
       });
@@ -149,7 +149,20 @@ async function startBulkSearch() {
 
   const baseDelay = delay;
   let currentDelay = delay;
-  addStatus(statusArea, `全${searchUrls.length}件を${baseDelay/1000}秒間隔で検索（エラー時は自動延長）`, 'info');
+  addStatus(statusArea, `全${searchUrls.length}件を${baseDelay/1000}秒間隔で検索（バックグラウンドタブ1つ使用）`, 'info');
+
+  // バックグラウンドタブを1つだけ作成
+  let searchTab;
+  try {
+    searchTab = await chrome.tabs.create({ url: 'about:blank', active: false });
+    addStatus(statusArea, `検索用タブを作成（非アクティブ）`, 'info');
+  } catch (e) {
+    addStatus(statusArea, `タブ作成失敗: ${e.message}`, 'error');
+    btn.disabled = false;
+    setSearchRunning(false);
+    btn.innerHTML = '第1段階：施設を一括検索';
+    return;
+  }
 
   let doneCount = 0;
   let foundTotal = 0;
@@ -166,11 +179,20 @@ async function startBulkSearch() {
     addStatus(statusArea, `[${doneCount}/${searchUrls.length}] ${item.label}`, 'info');
 
     try {
-      const html = await fetchPage(item.url);
-      const extracted = parseGoogleResults(html, item.area);
+      // タブを検索URLへ移動し、読み込み完了を待つ
+      await navigateAndWait(searchTab.id, item.url);
+
+      // content scriptを注入して検索結果を抽出
+      const results = await chrome.scripting.executeScript({
+        target: { tabId: searchTab.id },
+        func: extractGoogleResultsFromPage
+      });
+
+      const extracted = results?.[0]?.result || [];
       if (extracted.length > 0) {
         let added = 0;
         for (const v of extracted) {
+          v.area = item.area;
           const isDup = venues.some(ex => ex.officialUrl === v.officialUrl);
           if (!isDup) { v.id = Date.now() + Math.random(); venues.push(v); added++; }
         }
@@ -180,16 +202,16 @@ async function startBulkSearch() {
           saveVenues();
           updateResultCount();
         }
+      } else {
+        addStatus(statusArea, `  → 結果なし`, 'info');
       }
       consecutiveErrors = 0;
-      // 成功が続いたら間隔を元に戻す
       if (currentDelay > baseDelay) {
         currentDelay = Math.max(baseDelay, currentDelay - 1000);
         addStatus(statusArea, `  間隔を${currentDelay/1000}秒に短縮`, 'info');
       }
     } catch (e) {
       consecutiveErrors++;
-      // エラー時：間隔を倍に延長（最大60秒）
       currentDelay = Math.min(currentDelay * 2, 60000);
       addStatus(statusArea, `  → ${e.message}（間隔を${currentDelay/1000}秒に延長、${consecutiveErrors}回目）`, 'error');
       if (consecutiveErrors >= 8) {
@@ -201,6 +223,9 @@ async function startBulkSearch() {
     if (doneCount < searchUrls.length && !searchCancelled) await sleep(currentDelay);
   }
 
+  // 検索用タブを閉じる
+  try { await chrome.tabs.remove(searchTab.id); } catch (_) {}
+
   saveVenues();
   updateResultCount();
   renderResults();
@@ -209,6 +234,122 @@ async function startBulkSearch() {
   setSearchRunning(false);
   btn.innerHTML = '第1段階：施設を一括検索';
   if (!searchCancelled) addStatus(statusArea, `検索完了。新規${foundTotal}件、合計${venues.length}件`, 'success');
+}
+
+// =========================================================
+// タブをURLへ移動し、読み込み完了を待つ
+// =========================================================
+function navigateAndWait(tabId, url) {
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      chrome.tabs.onUpdated.removeListener(listener);
+      reject(new Error('ページ読み込みタイムアウト'));
+    }, 30000);
+
+    function listener(updatedTabId, changeInfo) {
+      if (updatedTabId === tabId && changeInfo.status === 'complete') {
+        clearTimeout(timeout);
+        chrome.tabs.onUpdated.removeListener(listener);
+        resolve();
+      }
+    }
+    chrome.tabs.onUpdated.addListener(listener);
+    chrome.tabs.update(tabId, { url }).catch(e => {
+      clearTimeout(timeout);
+      chrome.tabs.onUpdated.removeListener(listener);
+      reject(e);
+    });
+  });
+}
+
+// =========================================================
+// Google検索結果ページ上で実行される関数（content scriptとして注入）
+// ページのリアルなDOMから施設情報を抽出する
+// =========================================================
+function extractGoogleResultsFromPage() {
+  const results = [];
+  const seen = new Set();
+
+  document.querySelectorAll('#search .g, #rso .g, [data-hveid]').forEach(el => {
+    const linkEl = el.querySelector('a[href^="http"]');
+    const titleEl = el.querySelector('h3');
+    if (!linkEl || !titleEl) return;
+
+    const title = titleEl.textContent.trim();
+    const href = linkEl.href;
+    if (!href || seen.has(href)) return;
+    // Google内部リンクを除外
+    if (href.includes('google.com') || href.includes('google.co.jp')) return;
+    seen.add(href);
+
+    // スニペット
+    const snippetEl = el.querySelector('[data-sncf], .VwiC3b, .lEBKkf, [style*="-webkit-line-clamp"]');
+    const snippet = snippetEl?.textContent?.trim() || '';
+    const allText = title + ' ' + snippet;
+
+    // 施設フィルタ
+    const venueKw = ['会議室','レンタルスペース','貸会議室','公民館','コワーキング','ホテル',
+      '商工会議所','図書館','市民','センター','TKP','リージャス','スペース','研修','ルーム',
+      '個室','多目的','インスタベース','スペースマーケット','スペイシー','貸室','ホール'];
+    const isVenue = venueKw.some(kw => allText.includes(kw));
+    const isAgg = /まとめ|ランキング|おすすめ\d+選|比較/.test(title);
+    if (!isVenue || isAgg) return;
+
+    // 住所
+    const addrMatch = snippet.match(/〒?\d{3}-?\d{4}\s*[^\d].{5,30}/)
+      || snippet.match(/(東京都|北海道|(?:京都|大阪)府|.{2,3}県).{2,20}[区市町村].{1,20}/);
+    const address = addrMatch ? addrMatch[0].trim() : '';
+
+    // 電話
+    const phoneMatch = snippet.match(/0\d{1,4}[-\s]?\d{1,4}[-\s]?\d{3,4}/);
+    const phone = phoneMatch ? phoneMatch[0] : '';
+
+    // 料金
+    const priceMatches = allText.match(/\d{1,3},?\d{3}円[^\s。、]{0,20}/g) || [];
+    const hourlyMatch = allText.match(/(\d{1,2},?\d{3})円[/／]?(?:時間|h|1h|1時間)/i)
+      || allText.match(/(\d{3,5})円[~～〜／/]/)
+      || allText.match(/(\d{1,2},?\d{3})円/);
+    const hourlyPrice = hourlyMatch ? parseInt(hourlyMatch[1].replace(/,/g, '')) : null;
+
+    // プラットフォーム
+    let platform = '公式サイト';
+    if (href.includes('instabase.jp')) platform = 'インスタベース';
+    else if (href.includes('spacemarket.com')) platform = 'スペースマーケット';
+    else if (href.includes('spacee.jp')) platform = 'スペイシー';
+    else if (href.includes('upnow.jp')) platform = 'upnow';
+    else if (href.includes('tkp.jp')) platform = 'TKP';
+    else if (href.includes('nihonkaigishitsu')) platform = '日本会議室';
+
+    // 振込
+    let transferPayment = '要確認', paymentDetail = '';
+    const pMap = {
+      'インスタベース': ['○', '法人Paid登録（審査即時～3営業日）、月末締め→翌月末払い'],
+      'スペースマーケット': ['○', '法人Paid登録（審査2-3営業日）、月末締め→翌月末払い'],
+      'upnow': ['○', '請求書・領収書発行可'],
+      'TKP': ['○', '法人請求書払い標準対応'],
+      '日本会議室': ['○', '法人利用対応、都度請求書'],
+    };
+    if (pMap[platform]) { transferPayment = pMap[platform][0]; paymentDetail = pMap[platform][1]; }
+    const isPublic = /公民館|市民|図書館|センター|商工会議所/.test(title);
+    if (isPublic) { transferPayment = '△'; paymentDetail = '窓口現金精算が基本'; }
+
+    results.push({
+      name: title.substring(0, 80),
+      address, station: '', officialUrl: href,
+      bookingUrl: platform !== '公式サイト' ? href : '',
+      hourlyPrice, priceDetail: priceMatches.join(' / '),
+      capacity: '', photoUrl: '', platform,
+      commercialUse: isPublic ? '要確認' : '可',
+      transferPayment, paymentDetail,
+      equipment: '',
+      bookingMethod: platform !== '公式サイト' ? `${platform}から予約` : '要確認',
+      contactInfo: phone,
+      note: isPublic ? '公共施設：商行為該当の場合は料金2～3倍の可能性' : '',
+      area: '', distanceKm: null
+    });
+  });
+
+  return results;
 }
 
 // =========================================================
@@ -307,95 +448,6 @@ async function fetchPage(url) {
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return await res.text();
-}
-
-// =========================================================
-// Google検索結果HTMLをパースして施設情報を抽出
-// =========================================================
-function parseGoogleResults(html, area) {
-  const venues = [];
-  const seen = new Set();
-
-  // HTMLからリンクとタイトルを抽出（正規表現ベース、DOMParser不使用でも可）
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(html, 'text/html');
-
-  doc.querySelectorAll('.g, [data-hveid]').forEach(result => {
-    const linkEl = result.querySelector('a[href^="http"]');
-    const titleEl = result.querySelector('h3');
-    if (!linkEl || !titleEl) return;
-
-    const title = titleEl.textContent.trim();
-    const href = linkEl.href;
-    if (seen.has(href)) return;
-    seen.add(href);
-
-    // スニペット
-    const snippetEl = result.querySelector('.VwiC3b, [data-sncf], .lEBKkf');
-    const snippet = snippetEl?.textContent?.trim() || '';
-    const allText = title + ' ' + snippet;
-
-    // 施設フィルタ
-    const venueKw = ['会議室','レンタルスペース','貸会議室','公民館','コワーキング','ホテル','商工会議所','図書館','市民','センター','TKP','リージャス','スペース','研修','ルーム','個室','多目的','インスタベース','スペースマーケット','スペイシー'];
-    const isVenue = venueKw.some(kw => allText.includes(kw));
-    const isAgg = /まとめ|ランキング|おすすめ\d+選|比較/.test(title);
-    if (!isVenue || isAgg) return;
-
-    // 住所
-    const addrMatch = snippet.match(/〒?\d{3}-?\d{4}\s*[^\d].{5,30}/)
-      || snippet.match(/(東京都|北海道|(?:京都|大阪)府|.{2,3}県).{2,20}[区市町村].{1,20}/);
-    const address = addrMatch ? addrMatch[0].trim() : '';
-
-    // 電話
-    const phoneMatch = snippet.match(/0\d{1,4}[-\s]?\d{1,4}[-\s]?\d{3,4}/);
-    const phone = phoneMatch ? phoneMatch[0] : '';
-
-    // 料金（スニペットから）
-    const priceMatches = allText.match(/\d{1,3},?\d{3}円[^\s。、]{0,20}/g) || [];
-    const hourlyMatch = allText.match(/(\d{1,2},?\d{3})円[/／]?(?:時間|h|1h|1時間)/i)
-      || allText.match(/(\d{3,5})円[~～〜／/]/)
-      || allText.match(/(\d{1,2},?\d{3})円/);
-    const hourlyPrice = hourlyMatch ? parseInt(hourlyMatch[1].replace(/,/g, '')) : null;
-
-    // プラットフォーム判定
-    let platform = '公式サイト';
-    if (href.includes('instabase.jp')) platform = 'インスタベース';
-    else if (href.includes('spacemarket.com')) platform = 'スペースマーケット';
-    else if (href.includes('spacee.jp')) platform = 'スペイシー';
-    else if (href.includes('upnow.jp')) platform = 'upnow';
-    else if (href.includes('tkp.jp')) platform = 'TKP';
-    else if (href.includes('nihonkaigishitsu')) platform = '日本会議室';
-
-    // 振込
-    let transferPayment = '要確認', paymentDetail = '';
-    const pMap = {
-      'インスタベース': ['○', '法人Paid登録（審査即時～3営業日）、月末締め→翌月末払い'],
-      'スペースマーケット': ['○', '法人Paid登録（審査2-3営業日）、月末締め→翌月末払い'],
-      'upnow': ['○', '請求書・領収書発行可'],
-      'TKP': ['○', '法人請求書払い標準対応'],
-      '日本会議室': ['○', '法人利用対応、都度請求書'],
-    };
-    if (pMap[platform]) { transferPayment = pMap[platform][0]; paymentDetail = pMap[platform][1]; }
-    const isPublic = /公民館|市民|図書館|センター|商工会議所/.test(title);
-    if (isPublic) { transferPayment = '△'; paymentDetail = '窓口現金精算が基本'; }
-
-    venues.push({
-      name: title.substring(0, 80),
-      address, station: '', officialUrl: href,
-      bookingUrl: platform !== '公式サイト' ? href : '',
-      hourlyPrice, priceDetail: priceMatches.join(' / '),
-      capacity: '', photoUrl: '', platform,
-      commercialUse: isPublic ? '要確認' : '可',
-      transferPayment, paymentDetail,
-      equipment: '',
-      bookingMethod: platform !== '公式サイト' ? `${platform}から予約` : '要確認',
-      contactInfo: phone,
-      note: isPublic ? '公共施設：商行為該当の場合は料金2～3倍の可能性' : '',
-      area, distanceKm: null
-    });
-  });
-
-  return venues;
 }
 
 // =========================================================
