@@ -12,7 +12,10 @@
   "host_permissions": [
     "https://www.google.co.jp/*",
     "https://www.google.com/*",
-    "https://nominatim.openstreetmap.org/*"
+    "https://nominatim.openstreetmap.org/*",
+    "https://www.instabase.jp/*",
+    "https://www.spacemarket.com/*",
+    "https://www.spacee.jp/*"
   ],
   "action": {
     "default_popup": "popup/popup.html",
@@ -31,6 +34,21 @@
         "https://www.google.com/search*"
       ],
       "js": ["content/google.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://www.instabase.jp/*"],
+      "js": ["content/platform.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://www.spacemarket.com/*"],
+      "js": ["content/platform.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://www.spacee.jp/*"],
+      "js": ["content/platform.js"],
       "run_at": "document_idle"
     }
   ],

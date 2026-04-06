@@ -42,11 +42,17 @@
       const phoneMatch = snippet.match(/(?:0\d{1,4}[-\s]?\d{1,4}[-\s]?\d{3,4})/);
       const phone = phoneMatch ? phoneMatch[0] : '';
 
-      // 料金
+      // 料金（できるだけ多くのパターンを拾う）
       const allText = title + ' ' + snippet;
-      const priceMatch = allText.match(/(\d{1,2},?\d{3})円[/／]?(?:時間|h|1h)/i) ||
-        allText.match(/(?:時間|1h)[^\d]*(\d{1,2},?\d{3})円/i) ||
-        allText.match(/(\d{3,5})円[~～〜／/]/);
+      const allPriceMatches = allText.match(/\d{1,3},?\d{3}円[^\s。、]{0,20}/g) || [];
+      const priceDetailFromSnippet = allPriceMatches.join(' / ');
+
+      const priceMatch = allText.match(/(\d{1,2},?\d{3})円[/／]?(?:時間|h|1h|1時間)/i) ||
+        allText.match(/(?:時間|1h|1時間)[あたり]*[^\d]*(\d{1,2},?\d{3})円/i) ||
+        allText.match(/(\d{3,5})円[~～〜／/](?:時間|h)/i) ||
+        allText.match(/(?:¥|￥)(\d{1,2},?\d{3})[^\d]*[/／]?(?:時間|h)/i) ||
+        allText.match(/(\d{3,5})円[~～〜／/]/) ||
+        allText.match(/(\d{1,2},?\d{3})円/);
       let hourlyPrice = null;
       if (priceMatch) {
         hourlyPrice = parseInt(priceMatch[1].replace(/,/g, ''));
@@ -100,7 +106,7 @@
         officialUrl: href,
         bookingUrl: (platform !== '公式サイト') ? href : '',
         hourlyPrice: hourlyPrice,
-        priceDetail: priceMatch ? priceMatch[0] : '',
+        priceDetail: priceDetailFromSnippet || (priceMatch ? priceMatch[0] : ''),
         capacity: '',
         photoUrl: '',
         platform: platform,

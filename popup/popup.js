@@ -143,7 +143,7 @@ async function startBulkSearch() {
   // 座標をストレージに保存（コンテンツスクリプトで使う）
   await chrome.storage.local.set({ areaCoords });
 
-  // 各エリア × 各キーワードでGoogle検索タブを開く
+  // === Google検索タブ ===
   const keywords = getSearchKeywords();
   let openedCount = 0;
   for (const area of areas) {
@@ -153,11 +153,10 @@ async function startBulkSearch() {
         : `${area} ${keyword}`;
       const url = `https://www.google.co.jp/search?q=${encodeURIComponent(query)}&num=20`;
 
-      addStatus(statusArea, `${area} →「${keyword}」検索中...`, 'info');
+      addStatus(statusArea, `${area} →「${keyword}」Google検索...`, 'info');
       try {
         await chrome.tabs.create({ url, active: false });
         openedCount++;
-        // 5タブごとに少し待つ
         if (openedCount % 5 === 0) await sleep(800);
       } catch (e) {
         addStatus(statusArea, `タブ作成失敗: ${e.message}`, 'error');
@@ -165,8 +164,29 @@ async function startBulkSearch() {
     }
   }
 
-  addStatus(statusArea, `${openedCount}件のGoogle検索タブを開きました`, 'success');
-  addStatus(statusArea, '各タブから自動的に施設情報を抽出します。しばらくお待ちください。', 'info');
+  // === プラットフォーム直接検索タブ ===
+  for (const area of areas) {
+    const kw = encodeURIComponent(area);
+    const cap = document.getElementById('capacity').value || 2;
+    const platformUrls = [
+      { label: 'インスタベース', url: `https://www.instabase.jp/search?keyword=${kw}&pax=${cap}&category=meetingroom` },
+      { label: 'スペースマーケット', url: `https://www.spacemarket.com/spaces?keyword=${kw}&people=${cap}&types%5B%5D=meeting_room` },
+      { label: 'スペイシー', url: `https://www.spacee.jp/listings?location=${kw}&capacity=${cap}` },
+    ];
+    for (const p of platformUrls) {
+      addStatus(statusArea, `${area} → ${p.label} 直接検索...`, 'info');
+      try {
+        await chrome.tabs.create({ url: p.url, active: false });
+        openedCount++;
+        if (openedCount % 5 === 0) await sleep(800);
+      } catch (e) {
+        addStatus(statusArea, `${p.label} タブ作成失敗: ${e.message}`, 'error');
+      }
+    }
+  }
+
+  addStatus(statusArea, `${openedCount}件のタブを開きました（Google検索＋プラットフォーム直接）`, 'success');
+  addStatus(statusArea, 'Google検索タブは自動抽出。プラットフォームは「現在のページからデータ抽出」で取得できます。', 'info');
 
   btn.disabled = false;
   btn.innerHTML = '一括検索開始';
@@ -212,9 +232,12 @@ async function extractCurrentPage() {
       return;
     }
 
+    // ページの種類に応じた抽出関数を選択
+    const isGoogle = tab.url.includes('google.co.jp/search') || tab.url.includes('google.com/search');
     const results = await chrome.scripting.executeScript({
       target: { tabId: tab.id },
-      func: extractFromGoogleSearch
+      func: isGoogle ? extractFromGoogleSearch : extractFromPlatformPage,
+      args: isGoogle ? [] : [tab.url]
     });
 
     if (results && results[0] && results[0].result) {
@@ -277,11 +300,19 @@ function extractFromGoogleSearch() {
     const phoneMatch = snippet.match(/(?:0\d{1,4}[-\s]?\d{1,4}[-\s]?\d{3,4})/);
     const phone = phoneMatch ? phoneMatch[0] : '';
 
-    // 料金パターン
+    // 料金パターン（できるだけ多くのパターンを拾う）
     const allText = title + ' ' + snippet;
-    const priceMatch = allText.match(/(\d{1,2},?\d{3})円[/／]?(?:時間|h|1h)/i) ||
-                       allText.match(/(?:時間|1h)[^\d]*(\d{1,2},?\d{3})円/i) ||
-                       allText.match(/(\d{3,5})円[~～〜／/]/);
+    // 全ての料金っぽい記述を料金詳細に残す
+    const allPriceMatches = allText.match(/\d{1,3},?\d{3}円[^\s。、]{0,20}/g) || [];
+    const priceDetailFromSnippet = allPriceMatches.join(' / ');
+
+    // 時間単価の抽出（優先順）
+    const priceMatch = allText.match(/(\d{1,2},?\d{3})円[/／]?(?:時間|h|1h|1時間)/i) ||
+                       allText.match(/(?:時間|1h|1時間)[あたり]*[^\d]*(\d{1,2},?\d{3})円/i) ||
+                       allText.match(/(\d{3,5})円[~～〜／/](?:時間|h)/i) ||
+                       allText.match(/(?:¥|￥)(\d{1,2},?\d{3})[^\d]*[/／]?(?:時間|h)/i) ||
+                       allText.match(/(\d{3,5})円[~～〜／/]/) ||
+                       allText.match(/(\d{1,2},?\d{3})円/);
     let hourlyPrice = null;
     if (priceMatch) {
       hourlyPrice = parseInt(priceMatch[1].replace(/,/g, ''));
@@ -340,7 +371,7 @@ function extractFromGoogleSearch() {
       officialUrl: href,
       bookingUrl: (platform !== '公式サイト') ? href : '',
       hourlyPrice: hourlyPrice,
-      priceDetail: priceMatch ? priceMatch[0] : '',
+      priceDetail: priceDetailFromSnippet || (priceMatch ? priceMatch[0] : ''),
       capacity: '',
       photoUrl: '',
       platform: platform,
@@ -351,6 +382,89 @@ function extractFromGoogleSearch() {
       bookingMethod: platform !== '公式サイト' ? `${platform}から予約` : '要確認',
       contactInfo: phone,
       note: isPublic ? '公共施設：商行為該当の場合は料金2～3倍の可能性。要電話確認' : '',
+      area: '',
+      distanceKm: null
+    });
+  });
+
+  return venues;
+}
+
+// ===== プラットフォームページから施設情報を抽出（ページ内実行） =====
+function extractFromPlatformPage(pageUrl) {
+  const url = pageUrl || location.href;
+  const venues = [];
+  const seen = new Set();
+
+  let platform = '不明';
+  let linkSelector = '';
+  let payment = { transfer: '要確認', detail: '' };
+
+  if (url.includes('instabase.jp')) {
+    platform = 'インスタベース';
+    linkSelector = 'a[href*="/space/"]';
+    payment = { transfer: '○', detail: '法人Paid登録（審査即時～3営業日）、月末締め→翌月末払い' };
+  } else if (url.includes('spacemarket.com')) {
+    platform = 'スペースマーケット';
+    linkSelector = 'a[href*="/spaces/"]';
+    payment = { transfer: '○', detail: '法人Paid登録（審査2-3営業日）、月末締め→翌月末払い' };
+  } else if (url.includes('spacee.jp')) {
+    platform = 'スペイシー';
+    linkSelector = 'a[href*="/listings/"]';
+  } else {
+    return venues;
+  }
+
+  const links = document.querySelectorAll(linkSelector);
+  links.forEach(link => {
+    const href = link.href;
+    if (href.includes('/search') || href.includes('?keyword') || href.includes('/spaces?')) return;
+
+    const idMatch = href.match(/\/(?:space|spaces|listings)\/([a-zA-Z0-9_-]+)/);
+    if (!idMatch) return;
+    if (seen.has(idMatch[1])) return;
+    seen.add(idMatch[1]);
+
+    const card = link.closest('[class*="Card"]') || link.closest('[class*="card"]')
+      || link.closest('li') || link.closest('article')
+      || link.closest('[class*="item"]') || link.parentElement?.parentElement;
+    if (!card) return;
+
+    const nameEl = card.querySelector('h2, h3, h4, [class*="name"], [class*="title"], [class*="Name"], [class*="Title"]');
+    const name = nameEl?.textContent?.trim() || '';
+    if (!name || name.length < 2) return;
+
+    const priceEl = card.querySelector('[class*="price"], [class*="Price"]');
+    const priceText = priceEl?.textContent?.trim() || card.textContent || '';
+    const allPriceMatches = priceText.match(/\d{1,3},?\d{3}円[^\s。、]{0,15}/g) || [];
+    const priceDetail = allPriceMatches.join(' / ');
+    const hourlyMatch = priceText.match(/(\d{1,2},?\d{3})円[/／]?(?:時間|h|1h|1時間)/i)
+      || priceText.match(/(\d{3,5})円[~～〜／/]/)
+      || priceText.match(/(\d{1,2},?\d{3})円/);
+    const hourlyPrice = hourlyMatch ? parseInt(hourlyMatch[1].replace(/,/g, '')) : null;
+
+    const areaEl = card.querySelector('[class*="area"], [class*="address"], [class*="station"], [class*="location"]');
+    const capEl = card.querySelector('[class*="capacity"], [class*="people"]');
+    const imgEl = card.querySelector('img');
+
+    venues.push({
+      name: name.substring(0, 80),
+      address: areaEl?.textContent?.trim() || '',
+      station: '',
+      officialUrl: href,
+      bookingUrl: href,
+      hourlyPrice: hourlyPrice,
+      priceDetail: priceDetail || (hourlyMatch ? hourlyMatch[0] : ''),
+      capacity: capEl?.textContent?.trim() || '',
+      photoUrl: imgEl?.src || '',
+      platform: platform,
+      commercialUse: '可',
+      transferPayment: payment.transfer,
+      paymentDetail: payment.detail,
+      equipment: '',
+      bookingMethod: `${platform}から予約`,
+      contactInfo: '',
+      note: '',
       area: '',
       distanceKm: null
     });
@@ -479,6 +593,7 @@ function renderResults() {
         <span>${escHtml(v.address || '住所不明')}</span>
         <span>振込: ${escHtml(v.transferPayment || '不明')}</span>
       </div>
+      ${v.priceDetail ? `<div class="venue-price-detail">${escHtml(v.priceDetail)}</div>` : ''}
       <div class="venue-actions">
         <button onclick="window.open('${escAttr(v.officialUrl)}')">サイト</button>
         <button onclick="window.open('${escAttr(mapsUrl)}')">地図</button>
@@ -502,13 +617,12 @@ function exportExcel() {
   const fulldayHours = parseInt(document.getElementById('fullday-hours')?.value) || 8;
   const wb = XLSX.utils.book_new();
 
-  // 全施設一覧シート
+  // 全施設一覧シート（全件出力、フィルターで除外しない）
   const allData = venues.map(v => ({
     '基準地点': v.area || '',
     '距離（km）': v.distanceKm ?? '',
     '施設名': v.name || '',
     '施設住所': v.address || '',
-    '最寄駅': v.station || '',
     '公式URL': v.officialUrl || '',
     '予約URL': v.bookingUrl || '',
     'Google Map経路': v.address && v.area
@@ -521,21 +635,21 @@ function exportExcel() {
     '料金詳細': v.priceDetail || '',
     '振込対応': v.transferPayment || '要確認',
     '支払方法の詳細': v.paymentDetail || '',
-    '設備': v.equipment || '',
-    '収容人数': v.capacity || '',
-    '予約方法': v.bookingMethod || '',
     'プラットフォーム': v.platform || '',
+    '収容人数': v.capacity || '',
+    '設備': v.equipment || '',
+    '予約方法': v.bookingMethod || '',
     '備考': v.note || ''
   }));
 
   const ws1 = XLSX.utils.json_to_sheet(allData);
   ws1['!cols'] = [
-    { wch: 20 }, { wch: 10 }, { wch: 30 }, { wch: 30 }, { wch: 12 },
+    { wch: 20 }, { wch: 10 }, { wch: 30 }, { wch: 30 },
     { wch: 40 }, { wch: 40 }, { wch: 50 },
     { wch: 15 }, { wch: 10 },
-    { wch: 15 }, { wch: 18 }, { wch: 25 },
-    { wch: 10 }, { wch: 25 }, { wch: 20 },
-    { wch: 10 }, { wch: 15 }, { wch: 15 }, { wch: 30 }
+    { wch: 15 }, { wch: 18 }, { wch: 30 },
+    { wch: 10 }, { wch: 25 }, { wch: 15 },
+    { wch: 10 }, { wch: 20 }, { wch: 15 }, { wch: 30 }
   ];
   const range1 = XLSX.utils.decode_range(ws1['!ref']);
   ws1['!autofilter'] = { ref: XLSX.utils.encode_range(range1) };

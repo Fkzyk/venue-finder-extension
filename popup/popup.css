@@ -314,6 +314,17 @@ input:focus, textarea:focus, select:focus {
   text-overflow: ellipsis;
 }
 
+.venue-card .venue-price-detail {
+  font-size: 11px;
+  color: #666;
+  background: #fef7e0;
+  padding: 3px 6px;
+  border-radius: 4px;
+  margin-top: 4px;
+  line-height: 1.4;
+  word-break: break-all;
+}
+
 .venue-card .venue-actions {
   display: flex;
   gap: 6px;
