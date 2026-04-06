@@ -353,8 +353,7 @@ function extractGoogleResultsFromPage() {
 }
 
 // =========================================================
-// 第2段階：fetchで各施設ページを取得→料金を汎用抽出
-// タブを一切開かない
+// 第2段階：バックグラウンドタブ1つで各施設ページを開き料金を抽出
 // =========================================================
 async function fetchPricesForAll() {
   const btn = document.getElementById('btn-fetch-prices');
@@ -372,6 +371,19 @@ async function fetchPricesForAll() {
   btn.disabled = true;
   setSearchRunning(true);
   statusArea.innerHTML = '';
+
+  // バックグラウンドタブを1つだけ作成
+  let priceTab;
+  try {
+    priceTab = await chrome.tabs.create({ url: 'about:blank', active: false });
+    addStatus(statusArea, `料金取得用タブを作成（非アクティブ）`, 'info');
+  } catch (e) {
+    addStatus(statusArea, `タブ作成失敗: ${e.message}`, 'error');
+    btn.disabled = false;
+    setSearchRunning(false);
+    btn.innerHTML = '第2段階：料金を一括取得';
+    return;
+  }
 
   const baseDelay = delay;
   let currentDelay = delay;
@@ -392,8 +404,16 @@ async function fetchPricesForAll() {
     addStatus(statusArea, `[${doneCount}/${targets.length}] ${venue.name.substring(0, 35)}`, 'info');
 
     try {
-      const html = await fetchPage(venue.officialUrl);
-      const d = extractPriceFromHtml(html);
+      // タブを施設URLへ移動し、読み込み完了を待つ
+      await navigateAndWait(priceTab.id, venue.officialUrl);
+
+      // content scriptを注入してページから料金を抽出
+      const results = await chrome.scripting.executeScript({
+        target: { tabId: priceTab.id },
+        func: extractPriceFromPage
+      });
+
+      const d = results?.[0]?.result || {};
       if (d.hourlyPrice || d.priceDetail) {
         venue.hourlyPrice = d.hourlyPrice || venue.hourlyPrice;
         venue.priceDetail = d.priceDetail || venue.priceDetail;
@@ -404,7 +424,7 @@ async function fetchPricesForAll() {
         const ps = d.hourlyPrice ? `¥${d.hourlyPrice}/h` : '';
         addStatus(statusArea, `  → ${ps} ${(d.priceDetail || '').substring(0, 50)}`, 'success');
       } else {
-        addStatus(statusArea, `  → 料金情報なし`, 'error');
+        addStatus(statusArea, `  → 料金情報なし`, 'info');
       }
       saveVenues();
       updateResultCount();
@@ -426,6 +446,9 @@ async function fetchPricesForAll() {
     if (doneCount < targets.length && !searchCancelled) await sleep(currentDelay);
   }
 
+  // 料金取得用タブを閉じる
+  try { await chrome.tabs.remove(priceTab.id); } catch (_) {}
+
   saveVenues();
   updateResultCount();
   renderResults();
@@ -437,33 +460,11 @@ async function fetchPricesForAll() {
 }
 
 // =========================================================
-// fetchでページHTMLを取得
+// 施設ページ上で実行される関数（content scriptとして注入）
+// ページのリアルなテキストから料金・住所・電話・定員を抽出
 // =========================================================
-async function fetchPage(url) {
-  const res = await fetch(url, {
-    headers: {
-      'Accept': 'text/html,application/xhtml+xml',
-      'Accept-Language': 'ja,en;q=0.9',
-    }
-  });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return await res.text();
-}
-
-// =========================================================
-// HTMLテキストから料金を汎用抽出（第2段階用）
-// =========================================================
-function extractPriceFromHtml(html) {
-  // HTMLタグを除去してテキスト化
-  const text = html.replace(/<script[\s\S]*?<\/script>/gi, '')
-    .replace(/<style[\s\S]*?<\/style>/gi, '')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&#\d+;/g, '')
-    .replace(/\s+/g, ' ');
+function extractPriceFromPage() {
+  const text = document.body?.innerText || '';
 
   // --- 時間単価 ---
   const hourlyPatterns = [
