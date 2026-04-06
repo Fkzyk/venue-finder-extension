@@ -164,6 +164,15 @@ input:focus, textarea:focus, select:focus {
   cursor: not-allowed;
 }
 
+.btn-phase2 {
+  background: #e8710a;
+  margin-top: 6px;
+}
+
+.btn-phase2:hover {
+  background: #c45e08;
+}
+
 .btn-secondary {
   width: 100%;
   padding: 8px;
@@ -347,6 +356,11 @@ input:focus, textarea:focus, select:focus {
 .venue-card .venue-actions .btn-remove {
   color: #d93025;
   border-color: #d93025;
+}
+
+.venue-card.no-price {
+  border-left: 3px solid #f9a825;
+  opacity: 0.75;
 }
 
 .empty-state {

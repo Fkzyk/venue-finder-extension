@@ -31,7 +31,7 @@
       <div class="form-group">
         <label>基準地点（住所・駅名）</label>
         <textarea id="areas" rows="3" placeholder="例：&#10;東京都新宿区西新宿1-1-1&#10;横浜市中区本町6-50-10"></textarea>
-        <small>1行に1地点。そこから近い施設を検索します</small>
+        <small>1行に1地点。複数指定可能</small>
       </div>
 
       <div class="form-row">
@@ -55,8 +55,8 @@
         <input type="text" id="extra-keywords" placeholder="例：個室 WiFi">
       </div>
 
-      <button id="btn-search" class="btn-primary">一括検索開始</button>
-      <button id="btn-extract" class="btn-secondary">現在のページからデータ抽出</button>
+      <button id="btn-search" class="btn-primary">第1段階：施設を一括検索</button>
+      <button id="btn-fetch-prices" class="btn-primary btn-phase2">第2段階：料金を一括取得</button>
 
       <div id="search-status" class="status-area"></div>
     </div>
@@ -75,7 +75,7 @@
 
     <!-- 設定タブ -->
     <div id="tab-settings" class="tab-content">
-      <h2>調査設定</h2>
+      <h2>設定</h2>
 
       <div class="form-group">
         <label>利用期間</label>
@@ -87,17 +87,9 @@
       </div>
 
       <div class="form-group">
-        <label>支払方法フィルター（結果表示・Excel出力時に適用）</label>
-        <div class="checkbox-group">
-          <label><input type="checkbox" id="pay-transfer"> 振込対応のみ表示</label>
-          <label><input type="checkbox" id="pay-corporate"> 法人請求書払いのみ表示</label>
-        </div>
-      </div>
-
-      <div class="form-group">
         <label>検索キーワード（1行1キーワード。「{エリア名} {キーワード}」で検索）</label>
         <textarea id="search-keywords" rows="12" placeholder="貸会議室&#10;レンタルスペース&#10;公民館"></textarea>
-        <small>自動保存。空にするとデフォルト（25種）に戻ります</small>
+        <small>自動保存。空にするとデフォルトに戻ります</small>
       </div>
 
       <div class="form-group">

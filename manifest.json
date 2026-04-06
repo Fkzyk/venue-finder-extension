@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "会場探し一括検索",
-  "version": "2.0.0",
-  "description": "Google検索で会場・貸会議室を一括検索し、距離付きでExcel出力する",
+  "version": "3.0.0",
+  "description": "Google検索で施設を収集し、各サイトから料金を汎用抽出してExcel出力",
   "permissions": [
     "activeTab",
     "storage",
@@ -12,10 +12,7 @@
   "host_permissions": [
     "https://www.google.co.jp/*",
     "https://www.google.com/*",
-    "https://nominatim.openstreetmap.org/*",
-    "https://www.instabase.jp/*",
-    "https://www.spacemarket.com/*",
-    "https://www.spacee.jp/*"
+    "https://*/*"
   ],
   "action": {
     "default_popup": "popup/popup.html",
@@ -37,17 +34,11 @@
       "run_at": "document_idle"
     },
     {
-      "matches": ["https://www.instabase.jp/*"],
-      "js": ["content/platform.js"],
-      "run_at": "document_idle"
-    },
-    {
-      "matches": ["https://www.spacemarket.com/*"],
-      "js": ["content/platform.js"],
-      "run_at": "document_idle"
-    },
-    {
-      "matches": ["https://www.spacee.jp/*"],
+      "matches": [
+        "https://www.instabase.jp/*",
+        "https://www.spacemarket.com/*",
+        "https://www.spacee.jp/*"
+      ],
       "js": ["content/platform.js"],
       "run_at": "document_idle"
     }
