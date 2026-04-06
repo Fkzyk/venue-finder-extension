@@ -205,6 +205,16 @@ input:focus, textarea:focus, select:focus {
   background: #fce8e6;
 }
 
+.btn-stop {
+  background: #d93025;
+  color: #fff;
+  border: none;
+}
+
+.btn-stop:hover {
+  background: #b71c1c;
+}
+
 /* ステータスエリア */
 .status-area {
   margin-top: 10px;
