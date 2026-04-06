@@ -1,0 +1,53 @@
+{
+  "manifest_version": 3,
+  "name": "会場探し一括検索",
+  "version": "1.0.0",
+  "description": "複数プラットフォームから会場・貸会議室を一括検索し、Excel出力する",
+  "permissions": [
+    "activeTab",
+    "storage",
+    "tabs",
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://www.instabase.jp/*",
+    "https://www.spacemarket.com/*",
+    "https://www.spacee.jp/*",
+    "https://upnow.jp/*",
+    "https://www.google.com/maps/*",
+    "https://www.google.co.jp/maps/*",
+    "https://*.tkp.jp/*",
+    "https://nihonkaigishitsu.com/*"
+  ],
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_icon": {
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "background": {
+    "service_worker": "background/service-worker.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://www.instabase.jp/*"],
+      "js": ["content/instabase.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://www.spacemarket.com/*"],
+      "js": ["content/spacemarket.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://www.spacee.jp/*"],
+      "js": ["content/spacee.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "icons": {
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}

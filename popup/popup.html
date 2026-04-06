@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div id="app">
+    <!-- タブナビゲーション -->
+    <div class="tab-nav">
+      <button class="tab-btn active" data-tab="search">検索</button>
+      <button class="tab-btn" data-tab="results">結果 <span id="result-count">0</span></button>
+      <button class="tab-btn" data-tab="settings">設定</button>
+    </div>
+
+    <!-- 検索タブ -->
+    <div id="tab-search" class="tab-content active">
+      <h2>会場一括検索</h2>
+
+      <div class="form-group">
+        <label>調査目的</label>
+        <select id="purpose">
+          <option value="面接会場">面接会場</option>
+          <option value="研修室">研修室</option>
+          <option value="会議室">会議室</option>
+          <option value="セミナー会場">セミナー会場</option>
+          <option value="イベント会場">イベント会場</option>
+          <option value="その他">その他</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label>検索エリア（駅名・地名）</label>
+        <textarea id="areas" rows="3" placeholder="例：&#10;新宿駅&#10;渋谷駅&#10;横浜市中区"></textarea>
+        <small>1行に1エリア。複数エリア一括検索可能</small>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group half">
+          <label>予算上限（円/時）</label>
+          <input type="number" id="budget" value="2000" step="100">
+        </div>
+        <div class="form-group half">
+          <label>収容人数</label>
+          <input type="number" id="capacity" value="2" min="1">
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group half">
+          <label>終日の定義（時間）</label>
+          <input type="number" id="fullday-hours" value="8" min="1" max="24">
+        </div>
+        <div class="form-group half">
+          <label>移動手段</label>
+          <select id="transport">
+            <option value="徒歩">徒歩</option>
+            <option value="車">車</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>検索キーワード追加（任意）</label>
+        <input type="text" id="extra-keywords" placeholder="例：個室 WiFi">
+      </div>
+
+      <div class="form-group">
+        <label>検索対象プラットフォーム</label>
+        <div class="checkbox-group">
+          <label><input type="checkbox" value="instabase" checked> インスタベース</label>
+          <label><input type="checkbox" value="spacemarket" checked> スペースマーケット</label>
+          <label><input type="checkbox" value="spacee" checked> スペイシー</label>
+          <label><input type="checkbox" value="google" checked> Google検索</label>
+          <label><input type="checkbox" value="municipal" checked> 自治体（公民館等）</label>
+        </div>
+      </div>
+
+      <button id="btn-search" class="btn-primary">一括検索開始</button>
+      <button id="btn-extract" class="btn-secondary">現在のページからデータ抽出</button>
+
+      <div id="search-status" class="status-area"></div>
+    </div>
+
+    <!-- 結果タブ -->
+    <div id="tab-results" class="tab-content">
+      <div class="results-toolbar">
+        <button id="btn-export" class="btn-primary">Excel出力</button>
+        <button id="btn-clear" class="btn-danger">全削除</button>
+        <select id="filter-area">
+          <option value="">全エリア</option>
+        </select>
+      </div>
+      <div id="results-list" class="results-list"></div>
+    </div>
+
+    <!-- 設定タブ -->
+    <div id="tab-settings" class="tab-content">
+      <h2>調査設定</h2>
+
+      <div class="form-group">
+        <label>利用期間</label>
+        <div class="form-row">
+          <input type="date" id="period-start" class="half">
+          <span>〜</span>
+          <input type="date" id="period-end" class="half">
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>支払方法の要件</label>
+        <div class="checkbox-group">
+          <label><input type="checkbox" id="pay-transfer" checked> 振込対応必須</label>
+          <label><input type="checkbox" id="pay-invoice"> インボイス対応必須</label>
+          <label><input type="checkbox" id="pay-corporate"> 法人請求書払い</label>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>その他の条件</label>
+        <textarea id="other-conditions" rows="2" placeholder="例：駐車場必須、WiFi必須"></textarea>
+      </div>
+
+      <button id="btn-save-settings" class="btn-secondary">設定を保存</button>
+    </div>
+  </div>
+
+  <script src="../lib/xlsx.full.min.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>
