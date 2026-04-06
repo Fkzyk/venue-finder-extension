@@ -68,6 +68,15 @@ function isDuplicate(venues, v) {
   });
 }
 
+// ===== 検索中の不要ダウンロードをブロック =====
+function onDownloadCreated(item) {
+  // 自分のExcel出力以外のダウンロードをキャンセル
+  if (searchState.running && item.id) {
+    chrome.downloads.cancel(item.id);
+    chrome.downloads.erase({ id: item.id });
+  }
+}
+
 let searchState = {
   running: false,
   cancelled: false,
@@ -128,6 +137,7 @@ async function runPhase1(params) {
     running: true, cancelled: false, phase: 'phase1',
     progress: '', done: 0, total: 0, log: [],
   };
+  chrome.downloads.onCreated.addListener(onDownloadCreated);
 
   // 検索URL一覧を生成
   const searchUrls = [];
@@ -220,6 +230,7 @@ async function runPhase1(params) {
   }
 
   try { await chrome.tabs.remove(searchTab.id); } catch (_) {}
+  chrome.downloads.onCreated.removeListener(onDownloadCreated);
 
   if (!searchState.cancelled) {
     addLog(`検索完了。新規${foundTotal}件、合計${venues.length}件`, 'success');
@@ -238,6 +249,7 @@ async function runPhase2(params) {
     running: true, cancelled: false, phase: 'phase2',
     progress: '', done: 0, total: 0, log: [],
   };
+  chrome.downloads.onCreated.addListener(onDownloadCreated);
 
   const stored = await chrome.storage.local.get(['venues']);
   let venues = stored.venues || [];
@@ -327,6 +339,7 @@ async function runPhase2(params) {
   }
 
   try { await chrome.tabs.remove(priceTab.id); } catch (_) {}
+  chrome.downloads.onCreated.removeListener(onDownloadCreated);
 
   if (!searchState.cancelled) {
     addLog(`完了: ${successCount}/${targets.length}件で料金取得`, 'success');
@@ -365,17 +378,17 @@ function extractGoogleResultsFromPage(searchArea) {
     // 一覧・まとめ・ランキング系ページ
     if (/一覧|まとめ|ランキング|おすすめ|選\s*$|比較|探す$|見つかる|検索結果|口コミ|評判|ブログ|コラム|ニュース|特集/.test(title)) return;
 
-    // 法務・規約ページ
-    if (/特定商取引|プライバシー|利用規約|会社概要|採用情報|求人|お知らせ/.test(title)) return;
+    // 法務・規約・ディレクトリ系ページ
+    if (/特定商取引|プライバシー|利用規約|会社概要|採用情報|求人|お知らせ|電話番号・住所|地図$/.test(title)) return;
 
-    // 関係ない施設タイプ
-    if (/トランクルーム|駐車場|バーチャルオフィス|郵便局|銀行|病院|クリニック|薬局|美容|エステ|整体|マッサージ|ジム|フィットネス/.test(allText)) return;
+    // 関係ない施設・業種
+    if (/トランクルーム|駐車場|バーチャルオフィス|郵便局|銀行|病院|クリニック|薬局|美容|エステ|整体|マッサージ|ジム|フィットネス|カフェ|レストラン|居酒屋|ラーメン|ランチ|ディナー|ホテル宿泊|旅館|民宿|不動産|賃貸|売買|中古|引越|葬儀|ペット|保育|幼稚園|学習塾|自動車/.test(allText)) return;
 
     // === 施設キーワードチェック ===
     const venueKw = ['会議室','レンタルスペース','貸会議室','公民館','コワーキング',
       '商工会議所','図書館','市民センター','TKP','リージャス',
       'インスタベース','スペースマーケット','スペイシー',
-      '貸室','多目的室','研修室','ホール','セミナー'];
+      '貸室','多目的室','研修室','ホール','セミナー室'];
     const isVenue = venueKw.some(kw => allText.includes(kw));
     if (!isVenue) return;
 
