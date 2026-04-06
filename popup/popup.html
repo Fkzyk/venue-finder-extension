@@ -6,7 +6,6 @@
 </head>
 <body>
   <div id="app">
-    <!-- タブナビゲーション -->
     <div class="tab-nav">
       <button class="tab-btn active" data-tab="search">検索</button>
       <button class="tab-btn" data-tab="results">結果 <span id="result-count">0</span></button>
@@ -30,9 +29,9 @@
       </div>
 
       <div class="form-group">
-        <label>検索エリア（駅名・地名）</label>
-        <textarea id="areas" rows="3" placeholder="例：&#10;新宿駅&#10;渋谷駅&#10;横浜市中区"></textarea>
-        <small>1行に1エリア。複数エリア一括検索可能</small>
+        <label>基準地点（住所・駅名）</label>
+        <textarea id="areas" rows="3" placeholder="例：&#10;東京都新宿区西新宿1-1-1&#10;横浜市中区本町6-50-10"></textarea>
+        <small>1行に1地点。そこから近い施設を検索します</small>
       </div>
 
       <div class="form-row">
@@ -46,34 +45,14 @@
         </div>
       </div>
 
-      <div class="form-row">
-        <div class="form-group half">
-          <label>終日の定義（時間）</label>
-          <input type="number" id="fullday-hours" value="8" min="1" max="24">
-        </div>
-        <div class="form-group half">
-          <label>移動手段</label>
-          <select id="transport">
-            <option value="徒歩">徒歩</option>
-            <option value="車">車</option>
-          </select>
-        </div>
+      <div class="form-group">
+        <label>終日の定義（時間）</label>
+        <input type="number" id="fullday-hours" value="8" min="1" max="24">
       </div>
 
       <div class="form-group">
-        <label>検索キーワード追加（任意）</label>
+        <label>追加キーワード（任意）</label>
         <input type="text" id="extra-keywords" placeholder="例：個室 WiFi">
-      </div>
-
-      <div class="form-group">
-        <label>検索対象プラットフォーム</label>
-        <div class="checkbox-group">
-          <label><input type="checkbox" value="instabase" checked> インスタベース</label>
-          <label><input type="checkbox" value="spacemarket" checked> スペースマーケット</label>
-          <label><input type="checkbox" value="spacee" checked> スペイシー</label>
-          <label><input type="checkbox" value="google" checked> Google検索</label>
-          <label><input type="checkbox" value="municipal" checked> 自治体（公民館等）</label>
-        </div>
       </div>
 
       <button id="btn-search" class="btn-primary">一括検索開始</button>
@@ -108,12 +87,17 @@
       </div>
 
       <div class="form-group">
-        <label>支払方法の要件</label>
+        <label>支払方法フィルター（結果表示・Excel出力時に適用）</label>
         <div class="checkbox-group">
-          <label><input type="checkbox" id="pay-transfer" checked> 振込対応必須</label>
-          <label><input type="checkbox" id="pay-invoice"> インボイス対応必須</label>
-          <label><input type="checkbox" id="pay-corporate"> 法人請求書払い</label>
+          <label><input type="checkbox" id="pay-transfer"> 振込対応のみ表示</label>
+          <label><input type="checkbox" id="pay-corporate"> 法人請求書払いのみ表示</label>
         </div>
+      </div>
+
+      <div class="form-group">
+        <label>検索キーワード（1行1キーワード。エリア名と組み合わせて検索）</label>
+        <textarea id="search-keywords" rows="10" placeholder="貸会議室&#10;レンタルスペース 会議&#10;公民館 会議室 貸出"></textarea>
+        <small>編集後「設定を保存」で反映。空にするとデフォルトに戻ります</small>
       </div>
 
       <div class="form-group">

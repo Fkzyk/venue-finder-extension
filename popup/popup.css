@@ -272,10 +272,32 @@ input:focus, textarea:focus, select:focus {
   margin-bottom: 4px;
 }
 
-.venue-card .venue-area {
+.venue-card .venue-meta {
+  display: flex;
+  gap: 8px;
+  font-size: 12px;
+  margin-bottom: 4px;
+  align-items: center;
+}
+
+.venue-card .venue-distance {
+  background: #e8f0fe;
+  color: #1a73e8;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-weight: 700;
+  font-size: 11px;
+}
+
+.venue-card .venue-price {
+  font-weight: 700;
+  color: #d93025;
+  font-size: 12px;
+}
+
+.venue-card .venue-platform {
   font-size: 11px;
   color: #888;
-  margin-bottom: 4px;
 }
 
 .venue-card .venue-info {
@@ -290,11 +312,6 @@ input:focus, textarea:focus, select:focus {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.venue-card .venue-price {
-  font-weight: 700;
-  color: #d93025;
 }
 
 .venue-card .venue-actions {
