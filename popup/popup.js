@@ -2,6 +2,17 @@
 let venues = [];
 let searchSettings = {};
 
+// 自動保存対象のフォームフィールド
+const FORM_FIELDS = {
+  'purpose': 'value',
+  'areas': 'value',
+  'budget': 'value',
+  'capacity': 'value',
+  'fullday-hours': 'value',
+  'transport': 'value',
+  'extra-keywords': 'value'
+};
+
 // ===== 初期化 =====
 document.addEventListener('DOMContentLoaded', async () => {
   // タブ切り替え
@@ -17,15 +28,37 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('btn-save-settings').addEventListener('click', saveSettings);
   document.getElementById('filter-area').addEventListener('change', renderResults);
 
-  // 保存データ読み込み
-  const stored = await chrome.storage.local.get(['venues', 'searchSettings']);
+  // 保存データ読み込み（venues + settings + フォーム入力値 + チェックボックス + タブ状態）
+  const stored = await chrome.storage.local.get([
+    'venues', 'searchSettings', 'formData', 'platformChecks', 'activeTab'
+  ]);
   if (stored.venues) venues = stored.venues;
   if (stored.searchSettings) {
     searchSettings = stored.searchSettings;
     restoreSettings();
   }
+  if (stored.formData) restoreFormData(stored.formData);
+  if (stored.platformChecks) restorePlatformChecks(stored.platformChecks);
+  if (stored.activeTab) switchTab(stored.activeTab);
+
   updateResultCount();
   renderResults();
+
+  // フォーム入力値の自動保存（input/change イベント）
+  Object.keys(FORM_FIELDS).forEach(id => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.addEventListener('input', saveFormData);
+      el.addEventListener('change', saveFormData);
+    }
+  });
+
+  // プラットフォームチェックボックスの自動保存
+  document.querySelectorAll('.checkbox-group input[type="checkbox"][value]').forEach(cb => {
+    if (['instabase','spacemarket','spacee','google','municipal'].includes(cb.value)) {
+      cb.addEventListener('change', savePlatformChecks);
+    }
+  });
 
   // バックグラウンドからのメッセージ受信
   chrome.runtime.onMessage.addListener((msg) => {
@@ -33,7 +66,58 @@ document.addEventListener('DOMContentLoaded', async () => {
       addVenues(msg.data, msg.source);
     }
   });
+
+  // ストレージ変更を監視（コンテンツスクリプトが抽出→バックグラウンドが保存→ここで検知）
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === 'local' && changes.venues) {
+      venues = changes.venues.newValue || [];
+      updateResultCount();
+      renderResults();
+    }
+  });
 });
+
+// ===== フォーム自動保存・復元 =====
+function saveFormData() {
+  const formData = {};
+  Object.keys(FORM_FIELDS).forEach(id => {
+    const el = document.getElementById(id);
+    if (el) formData[id] = el.value;
+  });
+  chrome.storage.local.set({ formData });
+}
+
+function restoreFormData(formData) {
+  Object.keys(formData).forEach(id => {
+    const el = document.getElementById(id);
+    if (el && formData[id] !== undefined) el.value = formData[id];
+  });
+}
+
+function savePlatformChecks() {
+  const checks = {};
+  document.querySelectorAll('.checkbox-group input[type="checkbox"][value]').forEach(cb => {
+    if (['instabase','spacemarket','spacee','google','municipal'].includes(cb.value)) {
+      checks[cb.value] = cb.checked;
+    }
+  });
+  chrome.storage.local.set({ platformChecks: checks });
+}
+
+function restorePlatformChecks(checks) {
+  document.querySelectorAll('.checkbox-group input[type="checkbox"][value]').forEach(cb => {
+    if (checks[cb.value] !== undefined) {
+      cb.checked = checks[cb.value];
+    }
+  });
+}
+
+async function reloadVenuesFromStorage() {
+  const stored = await chrome.storage.local.get(['venues']);
+  if (stored.venues) venues = stored.venues;
+  updateResultCount();
+  renderResults();
+}
 
 // ===== タブ切り替え =====
 function switchTab(tabId) {
@@ -42,6 +126,7 @@ function switchTab(tabId) {
   document.querySelector(`[data-tab="${tabId}"]`).classList.add('active');
   document.getElementById(`tab-${tabId}`).classList.add('active');
   if (tabId === 'results') renderResults();
+  chrome.storage.local.set({ activeTab: tabId });
 }
 
 // ===== 一括検索 =====
@@ -68,6 +153,10 @@ async function startBulkSearch() {
   const purpose = document.getElementById('purpose').value;
   const capacity = document.getElementById('capacity').value;
   const extraKeywords = document.getElementById('extra-keywords').value.trim();
+
+  // 検索開始時にフォーム状態を保存
+  saveFormData();
+  savePlatformChecks();
 
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span>検索中...';
