@@ -36,6 +36,15 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('btn-save-settings').addEventListener('click', saveFormData);
   document.getElementById('filter-area').addEventListener('change', renderResults);
 
+  document.getElementById('btn-top').addEventListener('click', () => {
+    const active = document.querySelector('.tab-content.active');
+    if (active) active.scrollTo({ top: 0, behavior: 'smooth' });
+  });
+  document.getElementById('btn-bottom').addEventListener('click', () => {
+    const active = document.querySelector('.tab-content.active');
+    if (active) active.scrollTo({ top: active.scrollHeight, behavior: 'smooth' });
+  });
+
   const stored = await chrome.storage.local.get(['venues', 'formData', 'activeTab', 'searchState']);
   if (stored.venues) venues = stored.venues;
   if (stored.formData) restoreFormData(stored.formData);
