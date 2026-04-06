@@ -7,9 +7,15 @@
 <body>
   <div id="app">
     <div class="tab-nav">
-      <button class="tab-btn active" data-tab="search">検索</button>
-      <button class="tab-btn" data-tab="results">結果 <span id="result-count">0</span></button>
-      <button class="tab-btn" data-tab="settings">設定</button>
+      <button class="tab-btn active" data-tab="search">
+        <span class="tab-icon">🔍</span>検索
+      </button>
+      <button class="tab-btn" data-tab="results">
+        <span class="tab-icon">📋</span>結果 <span id="result-count" class="badge">0</span>
+      </button>
+      <button class="tab-btn" data-tab="settings">
+        <span class="tab-icon">⚙</span>設定
+      </button>
     </div>
 
     <!-- 検索タブ -->
@@ -66,8 +72,8 @@
       <div class="btn-row">
         <button id="btn-search" class="btn-primary">施設を検索</button>
         <button id="btn-fetch-prices" class="btn-primary btn-phase2">料金を取得</button>
-        <button id="btn-stop" class="btn-danger btn-stop" style="display:none;">中止</button>
       </div>
+      <button id="btn-stop" class="btn-stop hidden">検索を中止</button>
 
       <div id="search-status" class="status-area"></div>
     </div>

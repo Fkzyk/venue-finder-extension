@@ -83,27 +83,39 @@ function applySearchState(state) {
   const statusArea = document.getElementById('search-status');
 
   if (state.running) {
-    btnStop.style.display = 'block';
+    btnStop.classList.remove('hidden');
     if (state.phase === 'phase1') {
       btnSearch.disabled = true;
       btnSearch.innerHTML = `<span class="spinner"></span>${state.done}/${state.total}`;
+      btnPrice.disabled = true;
     } else if (state.phase === 'phase2') {
       btnPrice.disabled = true;
       btnPrice.innerHTML = `<span class="spinner"></span>${state.done}/${state.total}`;
+      btnSearch.disabled = true;
     }
-  } else {
-    btnStop.style.display = 'none';
-    btnSearch.disabled = false;
-    btnSearch.innerHTML = '第1段階：施設を一括検索';
-    btnPrice.disabled = false;
-    btnPrice.innerHTML = '第2段階：料金を一括取得';
-  }
 
-  // ログ表示
-  statusArea.innerHTML = '';
-  if (state.log && state.log.length > 0) {
-    for (const entry of state.log) {
-      addStatus(statusArea, entry.text, entry.type);
+    // 進捗表示：最新の状況をシンプルに
+    const lastLog = state.log && state.log.length > 0 ? state.log[state.log.length - 1] : null;
+    const phaseName = state.phase === 'phase1' ? '施設検索' : '料金取得';
+    let html = `<div class="status-running">`;
+    html += `<div class="status-running-title"><span class="spinner-dark"></span>${phaseName}中... ${state.done}/${state.total}</div>`;
+    if (lastLog) {
+      html += `<div class="status-running-detail ${lastLog.type}">${lastLog.text}</div>`;
+    }
+    html += `<div class="status-running-sub">ポップアップを閉じても検索は続きます</div>`;
+    html += `</div>`;
+    statusArea.innerHTML = html;
+  } else {
+    btnStop.classList.add('hidden');
+    btnSearch.disabled = false;
+    btnSearch.innerHTML = '施設を検索';
+    btnPrice.disabled = false;
+    btnPrice.innerHTML = '料金を取得';
+
+    // 完了時：最後のログだけ表示
+    const lastLog = state.log && state.log.length > 0 ? state.log[state.log.length - 1] : null;
+    if (lastLog) {
+      statusArea.innerHTML = `<div class="status-line ${lastLog.type}">${lastLog.text}</div>`;
     }
   }
 }
