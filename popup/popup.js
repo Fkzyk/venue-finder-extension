@@ -1,7 +1,7 @@
 // ===== 状態管理 =====
 let venues = [];
 
-const FORM_FIELDS = ['purpose', 'areas', 'budget', 'capacity', 'fullday-hours', 'extra-keywords', 'search-keywords', 'period-start', 'period-end', 'other-conditions'];
+const FORM_FIELDS = ['purpose', 'areas', 'budget', 'capacity', 'fullday-hours', 'extra-keywords', 'search-keywords', 'period-start', 'period-end', 'other-conditions', 'max-tabs', 'tab-delay', 'max-fetch'];
 
 const DEFAULT_SEARCH_KEYWORDS = [
   '貸会議室',
@@ -107,7 +107,8 @@ function switchTab(tabId) {
 }
 
 // =========================================================
-// 第1段階：Google検索で施設URLを大量収集
+// 第1段階：Google検索で施設URLを収集（逐次方式）
+// タブを開く→読み込み待ち→抽出→閉じる→間隔を空けて次
 // =========================================================
 async function startBulkSearch() {
   const btn = document.getElementById('btn-search');
@@ -122,45 +123,73 @@ async function startBulkSearch() {
   const areas = areasText.split('\n').map(a => a.trim()).filter(a => a);
   const extra = document.getElementById('extra-keywords').value.trim();
   const keywords = getSearchKeywords();
+  const maxTabs = parseInt(document.getElementById('max-tabs').value) || 3;
+  const tabDelay = (parseInt(document.getElementById('tab-delay').value) || 5) * 1000;
 
   saveFormData();
   btn.disabled = true;
-  btn.innerHTML = '<span class="spinner"></span>検索中...';
   statusArea.innerHTML = '';
 
-  let openedCount = 0;
+  // 全検索URLを生成
+  const searchUrls = [];
   for (const area of areas) {
     for (const keyword of keywords) {
       const query = extra ? `${area} ${keyword} ${extra}` : `${area} ${keyword}`;
-      const url = `https://www.google.co.jp/search?q=${encodeURIComponent(query)}&num=20`;
-      addStatus(statusArea, `${area} →「${keyword}」`, 'info');
+      searchUrls.push({
+        url: `https://www.google.co.jp/search?q=${encodeURIComponent(query)}&num=20`,
+        label: `${area} →「${keyword}」`,
+        area: area
+      });
+    }
+    // プラットフォーム直接検索
+    const kw = encodeURIComponent(area);
+    const cap = document.getElementById('capacity').value || 2;
+    searchUrls.push(
+      { url: `https://www.instabase.jp/search?keyword=${kw}&pax=${cap}&category=meetingroom`, label: `${area} → インスタベース`, area },
+      { url: `https://www.spacemarket.com/spaces?keyword=${kw}&people=${cap}&types%5B%5D=meeting_room`, label: `${area} → スペースマーケット`, area },
+      { url: `https://www.spacee.jp/listings?location=${kw}&capacity=${cap}`, label: `${area} → スペイシー`, area },
+    );
+  }
+
+  addStatus(statusArea, `全${searchUrls.length}件を${maxTabs}タブずつ、${tabDelay/1000}秒間隔で検索します`, 'info');
+
+  let doneCount = 0;
+  // maxTabsずつバッチ処理
+  for (let i = 0; i < searchUrls.length; i += maxTabs) {
+    const batch = searchUrls.slice(i, i + maxTabs);
+    const tabs = [];
+
+    // バッチ分のタブを開く
+    for (const item of batch) {
+      doneCount++;
+      btn.innerHTML = `<span class="spinner"></span>${doneCount}/${searchUrls.length}`;
+      addStatus(statusArea, `[${doneCount}/${searchUrls.length}] ${item.label}`, 'info');
       try {
-        await chrome.tabs.create({ url, active: false });
-        openedCount++;
-        if (openedCount % 5 === 0) await sleep(800);
+        const tab = await chrome.tabs.create({ url: item.url, active: false });
+        tabs.push(tab);
       } catch (e) {
-        addStatus(statusArea, `タブ作成失敗: ${e.message}`, 'error');
+        addStatus(statusArea, `  タブ作成失敗: ${e.message}`, 'error');
       }
     }
 
-    // プラットフォーム直接検索も併用
-    const kw = encodeURIComponent(area);
-    const cap = document.getElementById('capacity').value || 2;
-    const platforms = [
-      { label: 'インスタベース', url: `https://www.instabase.jp/search?keyword=${kw}&pax=${cap}&category=meetingroom` },
-      { label: 'スペースマーケット', url: `https://www.spacemarket.com/spaces?keyword=${kw}&people=${cap}&types%5B%5D=meeting_room` },
-      { label: 'スペイシー', url: `https://www.spacee.jp/listings?location=${kw}&capacity=${cap}` },
-    ];
-    for (const p of platforms) {
-      try {
-        await chrome.tabs.create({ url: p.url, active: false });
-        openedCount++;
-      } catch (e) { /* skip */ }
+    // 全タブの読み込み完了を待つ
+    await Promise.all(tabs.map(tab => waitForTabLoad(tab.id, 15000)));
+
+    // 少し待ってからタブを閉じる（コンテンツスクリプトの抽出時間）
+    await sleep(2000);
+    for (const tab of tabs) {
+      try { await chrome.tabs.remove(tab.id); } catch (e) { }
+    }
+
+    // 次のバッチまで間隔を空ける
+    if (i + maxTabs < searchUrls.length) {
+      addStatus(statusArea, `${tabDelay/1000}秒待機中...`, 'info');
+      await sleep(tabDelay);
     }
   }
 
-  addStatus(statusArea, `${openedCount}件のタブを開きました。自動抽出中...`, 'success');
-  addStatus(statusArea, '抽出完了後「第2段階：料金を一括取得」で各施設の料金を取得してください', 'info');
+  addStatus(statusArea, `検索完了。${venues.length}件の施設を収集済み`, 'success');
+  addStatus(statusArea, '次に「第2段階」で料金を取得してください', 'info');
 
   btn.disabled = false;
   btn.innerHTML = '第1段階：施設を一括検索';
@@ -173,15 +202,17 @@ async function fetchPricesForAll() {
   const btn = document.getElementById('btn-fetch-prices');
   const statusArea = document.getElementById('search-status');
 
-  const targets = venues.filter(v => !v.hourlyPrice && v.officialUrl);
-  if (targets.length === 0) {
+  const maxFetch = parseInt(document.getElementById('max-fetch').value) || 20;
+  const allTargets = venues.filter(v => !v.hourlyPrice && v.officialUrl);
+  if (allTargets.length === 0) {
     addStatus(statusArea, '料金未取得の施設がありません', 'success');
     return;
   }
+  const targets = allTargets.slice(0, maxFetch);
 
   btn.disabled = true;
   statusArea.innerHTML = '';
-  addStatus(statusArea, `${targets.length}件の施設から料金を取得します`, 'info');
+  addStatus(statusArea, `料金未取得${allTargets.length}件中、${targets.length}件を取得します`, 'info');
 
   let doneCount = 0;
   let successCount = 0;
@@ -217,7 +248,8 @@ async function fetchPricesForAll() {
       }
 
       try { await chrome.tabs.remove(tab.id); } catch (e) { }
-      await sleep(1200);
+      const tabDelay = (parseInt(document.getElementById('tab-delay').value) || 5) * 1000;
+      await sleep(tabDelay);
     } catch (e) {
       addStatus(statusArea, `  → エラー: ${e.message}`, 'error');
     }

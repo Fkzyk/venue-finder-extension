@@ -55,6 +55,23 @@
         <input type="text" id="extra-keywords" placeholder="例：個室 WiFi">
       </div>
 
+      <div class="form-row">
+        <div class="form-group half">
+          <label>第1段階：同時タブ数</label>
+          <input type="number" id="max-tabs" value="3" min="1" max="10">
+        </div>
+        <div class="form-group half">
+          <label>タブ間隔（秒）</label>
+          <input type="number" id="tab-delay" value="5" min="2" max="30">
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>第2段階：最大取得件数</label>
+        <input type="number" id="max-fetch" value="20" min="1" max="100">
+        <small>料金未取得の施設をこの件数まで順に取得</small>
+      </div>
+
       <button id="btn-search" class="btn-primary">第1段階：施設を一括検索</button>
       <button id="btn-fetch-prices" class="btn-primary btn-phase2">第2段階：料金を一括取得</button>
 
