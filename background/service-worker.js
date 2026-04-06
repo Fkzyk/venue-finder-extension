@@ -1,6 +1,45 @@
 // ===== バックグラウンド サービスワーカー =====
 // 検索ロジックはすべてここで実行。ポップアップを閉じても止まらない。
 
+// ===== 重複チェック =====
+function normalizeUrl(url) {
+  try {
+    const u = new URL(url);
+    // クエリパラメータとハッシュを除去、末尾スラッシュ統一、http→https統一
+    let path = u.pathname.replace(/\/+$/, '');
+    return (u.hostname + path).toLowerCase();
+  } catch (_) {
+    return url.toLowerCase().replace(/[?#].*$/, '').replace(/\/+$/, '');
+  }
+}
+
+function normalizeName(name) {
+  // 記号・空白・全角半角を統一して比較用文字列を作る
+  return (name || '')
+    .replace(/[\s\u3000　・|｜\-ー–—―／/\\【】「」『』（）()[\]""'']/g, '')
+    .replace(/[Ａ-Ｚａ-ｚ０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0))
+    .toLowerCase();
+}
+
+function isDuplicate(venues, v) {
+  const newUrl = normalizeUrl(v.officialUrl || '');
+  const newName = normalizeName(v.name);
+
+  return venues.some(ex => {
+    // URL一致（正規化後）
+    if (newUrl && normalizeUrl(ex.officialUrl || '') === newUrl) return true;
+    // 施設名がほぼ同じ（一方が他方を含む、かつ5文字以上の名前）
+    if (newName.length >= 5 && normalizeName(ex.name).length >= 5) {
+      const exName = normalizeName(ex.name);
+      if (newName === exName) return true;
+      if (newName.length >= 8 && exName.length >= 8) {
+        if (newName.includes(exName) || exName.includes(newName)) return true;
+      }
+    }
+    return false;
+  });
+}
+
 let searchState = {
   running: false,
   cancelled: false,
@@ -122,8 +161,7 @@ async function runPhase1(params) {
         let added = 0;
         for (const v of extracted) {
           v.area = item.area;
-          const isDup = venues.some(ex => ex.officialUrl === v.officialUrl);
-          if (!isDup) { v.id = Date.now() + Math.random(); venues.push(v); added++; }
+          if (!isDuplicate(venues, v)) { v.id = Date.now() + Math.random(); venues.push(v); added++; }
         }
         foundTotal += added;
         if (added > 0) {
@@ -448,10 +486,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       const newVenues = msg.data || [];
       let addedCount = 0;
       for (const v of newVenues) {
-        const isDup = venues.some(existing =>
-          existing.name === v.name && existing.platform === v.platform
-        );
-        if (!isDup) {
+        if (!isDuplicate(venues, v)) {
           v.id = Date.now() + Math.random();
           venues.push(v);
           addedCount++;
