@@ -2,40 +2,68 @@
 // 検索ロジックはすべてここで実行。ポップアップを閉じても止まらない。
 
 // ===== 重複チェック =====
+
+// URLからドメイン部分を取得
+function getDomain(url) {
+  try { return new URL(url).hostname.replace(/^www\./, '').toLowerCase(); }
+  catch (_) { return ''; }
+}
+
+// URLを正規化（同じページの別バリエーションを統一）
 function normalizeUrl(url) {
   try {
     const u = new URL(url);
-    // クエリパラメータとハッシュを除去、末尾スラッシュ統一、http→https統一
     let path = u.pathname.replace(/\/+$/, '');
-    return (u.hostname + path).toLowerCase();
+    // 末尾の /access, /price, /map, /info, /guide, /detail 等を除去（施設のサブページ）
+    path = path.replace(/\/(access|price|fee|map|info|guide|detail|contact|about|review|photo|gallery|images|facilities|equipment|faq|inquiry|reserve|booking|plan)$/i, '');
+    return (u.hostname.replace(/^www\./, '') + path).toLowerCase();
   } catch (_) {
     return url.toLowerCase().replace(/[?#].*$/, '').replace(/\/+$/, '');
   }
 }
 
+// 施設名を正規化
 function normalizeName(name) {
-  // 記号・空白・全角半角を統一して比較用文字列を作る
   return (name || '')
-    .replace(/[\s\u3000　・|｜\-ー–—―／/\\【】「」『』（）()[\]""'']/g, '')
+    .replace(/[\s\u3000　・|｜\-ー–—―／/\\【】「」『』（）()[\]""''《》<>＜＞]/g, '')
     .replace(/[Ａ-Ｚａ-ｚ０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0))
+    .replace(/(の|（.*?）|\(.*?\)|料金|アクセス|地図|予約|口コミ|評判|公式)$/g, '')
     .toLowerCase();
 }
 
+// プラットフォームサイトのドメイン一覧
+const PLATFORM_DOMAINS = [
+  'instabase.jp', 'spacemarket.com', 'spacee.jp', 'upnow.jp',
+  'tkp.jp', 'nihonkaigishitsu.co.jp', 'natuluck.com', 'timeroom.jp'
+];
+
 function isDuplicate(venues, v) {
   const newUrl = normalizeUrl(v.officialUrl || '');
+  const newDomain = getDomain(v.officialUrl || '');
   const newName = normalizeName(v.name);
+  const isPlatform = PLATFORM_DOMAINS.some(d => newDomain.includes(d));
 
   return venues.some(ex => {
-    // URL一致（正規化後）
-    if (newUrl && normalizeUrl(ex.officialUrl || '') === newUrl) return true;
-    // 施設名がほぼ同じ（一方が他方を含む、かつ5文字以上の名前）
-    if (newName.length >= 5 && normalizeName(ex.name).length >= 5) {
-      const exName = normalizeName(ex.name);
+    const exUrl = normalizeUrl(ex.officialUrl || '');
+    const exDomain = getDomain(ex.officialUrl || '');
+    const exName = normalizeName(ex.name);
+
+    // 1. URL一致（サブページ除去後）
+    if (newUrl && exUrl === newUrl) return true;
+
+    // 2. 同じドメインの別ページ（プラットフォーム以外）
+    //    例：venue-x.co.jp/room-a と venue-x.co.jp/access → 同じ施設
+    if (!isPlatform && newDomain && exDomain === newDomain) return true;
+
+    // 3. 施設名一致
+    if (newName.length >= 4 && exName.length >= 4) {
       if (newName === exName) return true;
-      if (newName.length >= 8 && exName.length >= 8) {
+      // 一方が他方を含む（6文字以上）
+      if (newName.length >= 6 && exName.length >= 6) {
         if (newName.includes(exName) || exName.includes(newName)) return true;
       }
     }
+
     return false;
   });
 }
