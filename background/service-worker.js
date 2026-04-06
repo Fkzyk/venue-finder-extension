@@ -181,14 +181,14 @@ async function runPhase1(params) {
 
       const results = await chrome.scripting.executeScript({
         target: { tabId: searchTab.id },
-        func: extractGoogleResultsFromPage
+        func: extractGoogleResultsFromPage,
+        args: [item.area]
       });
 
       const extracted = results?.[0]?.result || [];
       if (extracted.length > 0) {
         let added = 0;
         for (const v of extracted) {
-          v.area = item.area;
           if (!isDuplicate(venues, v)) { v.id = Date.now() + Math.random(); venues.push(v); added++; }
         }
         foundTotal += added;
@@ -338,9 +338,12 @@ async function runPhase2(params) {
 // =========================================================
 // Google検索結果ページで実行（注入用）
 // =========================================================
-function extractGoogleResultsFromPage() {
+function extractGoogleResultsFromPage(searchArea) {
   const results = [];
   const seen = new Set();
+
+  // 検索エリアからキーワードを抽出（「岡山県岡山市南区福成2丁目」→「岡山」「南区」等）
+  const areaTokens = (searchArea || '').replace(/\d[\d\-]+/g, '').match(/[\u4e00-\u9fff]{2,}/g) || [];
 
   document.querySelectorAll('#search .g, #rso .g, [data-hveid]').forEach(el => {
     const linkEl = el.querySelector('a[href^="http"]');
@@ -357,13 +360,33 @@ function extractGoogleResultsFromPage() {
     const snippet = snippetEl?.textContent?.trim() || '';
     const allText = title + ' ' + snippet;
 
-    const venueKw = ['会議室','レンタルスペース','貸会議室','公民館','コワーキング','ホテル',
-      '商工会議所','図書館','市民','センター','TKP','リージャス','スペース','研修','ルーム',
-      '個室','多目的','インスタベース','スペースマーケット','スペイシー','貸室','ホール'];
-    const isVenue = venueKw.some(kw => allText.includes(kw));
-    const isAgg = /まとめ|ランキング|おすすめ\d+選|比較/.test(title);
-    if (!isVenue || isAgg) return;
+    // === 除外フィルター（先にゴミを弾く） ===
 
+    // 一覧・まとめ・ランキング系ページ
+    if (/一覧|まとめ|ランキング|おすすめ|選\s*$|比較|探す$|見つかる|検索結果|口コミ|評判|ブログ|コラム|ニュース|特集/.test(title)) return;
+
+    // 法務・規約ページ
+    if (/特定商取引|プライバシー|利用規約|会社概要|採用情報|求人|お知らせ/.test(title)) return;
+
+    // 関係ない施設タイプ
+    if (/トランクルーム|駐車場|バーチャルオフィス|郵便局|銀行|病院|クリニック|薬局|美容|エステ|整体|マッサージ|ジム|フィットネス/.test(allText)) return;
+
+    // === 施設キーワードチェック ===
+    const venueKw = ['会議室','レンタルスペース','貸会議室','公民館','コワーキング',
+      '商工会議所','図書館','市民センター','TKP','リージャス',
+      'インスタベース','スペースマーケット','スペイシー',
+      '貸室','多目的室','研修室','ホール','セミナー'];
+    const isVenue = venueKw.some(kw => allText.includes(kw));
+    if (!isVenue) return;
+
+    // === エリア関連性チェック ===
+    // タイトルやスニペットに検索エリアのキーワードが含まれるか
+    if (areaTokens.length > 0) {
+      const hasAreaRelevance = areaTokens.some(token => allText.includes(token) || href.includes(token));
+      if (!hasAreaRelevance) return;  // エリアと無関係な結果は除外
+    }
+
+    // === 情報抽出 ===
     const addrMatch = snippet.match(/〒?\d{3}-?\d{4}\s*[^\d].{5,30}/)
       || snippet.match(/(東京都|北海道|(?:京都|大阪)府|.{2,3}県).{2,20}[区市町村].{1,20}/);
     const address = addrMatch ? addrMatch[0].trim() : '';
@@ -409,7 +432,7 @@ function extractGoogleResultsFromPage() {
       bookingMethod: platform !== '公式サイト' ? `${platform}から予約` : '要確認',
       contactInfo: phone,
       note: isPublic ? '公共施設：商行為該当の場合は料金2～3倍の可能性' : '',
-      area: '', distanceKm: null
+      area: searchArea || '', distanceKm: null
     });
   });
 
