@@ -570,3 +570,37 @@ chrome.runtime.onInstalled.addListener(() => {
     }
   });
 });
+
+// ===== アイコンクリック → 独立ウィンドウで開く（自由に移動可能）=====
+let panelWindowId = null;
+
+chrome.action.onClicked.addListener(async () => {
+  // 既に開いていたらフォーカス
+  if (panelWindowId != null) {
+    try {
+      const win = await chrome.windows.get(panelWindowId);
+      if (win) {
+        await chrome.windows.update(panelWindowId, { focused: true });
+        return;
+      }
+    } catch (_) {
+      panelWindowId = null;
+    }
+  }
+
+  // 新しいウィンドウで開く
+  const win = await chrome.windows.create({
+    url: chrome.runtime.getURL('popup/popup.html'),
+    type: 'popup',
+    width: 420,
+    height: 580,
+    top: 80,
+    left: Math.round(screen.availWidth - 450),
+  });
+  panelWindowId = win.id;
+});
+
+// ウィンドウが閉じられたらID解除
+chrome.windows.onRemoved.addListener((windowId) => {
+  if (windowId === panelWindowId) panelWindowId = null;
+});
