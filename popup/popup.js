@@ -147,7 +147,9 @@ async function startBulkSearch() {
     }
   }
 
-  addStatus(statusArea, `全${searchUrls.length}件を${delay/1000}秒間隔で検索（バックグラウンド）`, 'info');
+  const baseDelay = delay;
+  let currentDelay = delay;
+  addStatus(statusArea, `全${searchUrls.length}件を${baseDelay/1000}秒間隔で検索（エラー時は自動延長）`, 'info');
 
   let doneCount = 0;
   let foundTotal = 0;
@@ -175,21 +177,28 @@ async function startBulkSearch() {
         foundTotal += added;
         if (added > 0) {
           addStatus(statusArea, `  → ${added}件追加（合計${venues.length}件）`, 'success');
-          saveVenues();          // 見つかるたびに即保存
+          saveVenues();
           updateResultCount();
         }
       }
-      consecutiveErrors = 0;  // 成功したらリセット
+      consecutiveErrors = 0;
+      // 成功が続いたら間隔を元に戻す
+      if (currentDelay > baseDelay) {
+        currentDelay = Math.max(baseDelay, currentDelay - 1000);
+        addStatus(statusArea, `  間隔を${currentDelay/1000}秒に短縮`, 'info');
+      }
     } catch (e) {
-      addStatus(statusArea, `  → ${e.message}`, 'error');
       consecutiveErrors++;
-      if (consecutiveErrors >= 5) {
-        addStatus(statusArea, `連続エラー${consecutiveErrors}回のため自動中止（ボット判定の可能性）`, 'error');
+      // エラー時：間隔を倍に延長（最大60秒）
+      currentDelay = Math.min(currentDelay * 2, 60000);
+      addStatus(statusArea, `  → ${e.message}（間隔を${currentDelay/1000}秒に延長、${consecutiveErrors}回目）`, 'error');
+      if (consecutiveErrors >= 8) {
+        addStatus(statusArea, `連続エラー${consecutiveErrors}回のため自動中止`, 'error');
         break;
       }
     }
 
-    if (doneCount < searchUrls.length && !searchCancelled) await sleep(delay);
+    if (doneCount < searchUrls.length && !searchCancelled) await sleep(currentDelay);
   }
 
   saveVenues();
@@ -222,7 +231,10 @@ async function fetchPricesForAll() {
   btn.disabled = true;
   setSearchRunning(true);
   statusArea.innerHTML = '';
-  addStatus(statusArea, `料金未取得${allTargets.length}件中、${targets.length}件を取得します`, 'info');
+
+  const baseDelay = delay;
+  let currentDelay = delay;
+  addStatus(statusArea, `料金未取得${allTargets.length}件中、${targets.length}件を取得（エラー時は自動延長）`, 'info');
 
   let doneCount = 0;
   let successCount = 0;
@@ -253,19 +265,24 @@ async function fetchPricesForAll() {
       } else {
         addStatus(statusArea, `  → 料金情報なし`, 'error');
       }
-      saveVenues();          // 取得するたびに即保存
+      saveVenues();
       updateResultCount();
       consecutiveErrors = 0;
+      if (currentDelay > baseDelay) {
+        currentDelay = Math.max(baseDelay, currentDelay - 1000);
+        addStatus(statusArea, `  間隔を${currentDelay/1000}秒に短縮`, 'info');
+      }
     } catch (e) {
-      addStatus(statusArea, `  → ${e.message}`, 'error');
       consecutiveErrors++;
-      if (consecutiveErrors >= 5) {
+      currentDelay = Math.min(currentDelay * 2, 60000);
+      addStatus(statusArea, `  → ${e.message}（間隔を${currentDelay/1000}秒に延長、${consecutiveErrors}回目）`, 'error');
+      if (consecutiveErrors >= 8) {
         addStatus(statusArea, `連続エラー${consecutiveErrors}回のため自動中止`, 'error');
         break;
       }
     }
 
-    if (doneCount < targets.length && !searchCancelled) await sleep(delay);
+    if (doneCount < targets.length && !searchCancelled) await sleep(currentDelay);
   }
 
   saveVenues();
